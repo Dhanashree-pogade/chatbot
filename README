@@ -1,0 +1,25 @@
+# Customer Service Chatbot
+
+A simple customer service chatbot built using Python and Tkinter. It helps users with basic customer service tasks like asking about business hours, product information, order status, returns, and more. The chatbot also analyzes sentiment to adjust its responses.
+
+## Features
+
+- **Dynamic Responses**: The bot responds based on the context of the conversation.
+- **Sentiment Analysis**: Adjusts tone based on positive or negative sentiments.
+- **Knowledge Base**: Information about business hours, policies, and products.
+- **Escalation**: Offers to connect to a human representative if the sentiment is negative for multiple interactions.
+- **Fallback Responses**: Provides default responses when the bot doesn't understand the query.
+- **Personalized Interaction**: Remembers the user's name and past interactions.
+
+## Requirements
+
+- Python 3.x
+- Tkinter (usually included with Python)
+
+## How to Use
+
+Simply run the `chatbot.py` file in Python, and the chatbot will start. Type your query in the input field and hit **Enter** or click **Send**.
+
+## Customizing the Knowledge Base
+
+You can modify the chatbot’s knowledge base by editing the `chatbot_knowledge.json` file. This includes information about business hours, policies, products, and more.
