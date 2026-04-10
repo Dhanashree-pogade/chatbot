@@ -1,25 +1,116 @@
-# Customer Service Chatbot
+# 🤖 AI-Powered Customer Support Chatbot
 
-A simple customer service chatbot built using Python and Tkinter. It helps users with basic customer service tasks like asking about business hours, product information, order status, returns, and more. The chatbot also analyzes sentiment to adjust its responses.
+A context-aware customer support chatbot built with Python, featuring **Retrieval-Augmented Generation (RAG)**, **LLM-style Intent Classification**, **Sentiment Analysis**, and a **Tkinter GUI**.
 
-## Features
+---
 
-- **Dynamic Responses**: The bot responds based on the context of the conversation.
-- **Sentiment Analysis**: Adjusts tone based on positive or negative sentiments.
-- **Knowledge Base**: Information about business hours, policies, and products.
-- **Escalation**: Offers to connect to a human representative if the sentiment is negative for multiple interactions.
-- **Fallback Responses**: Provides default responses when the bot doesn't understand the query.
-- **Personalized Interaction**: Remembers the user's name and past interactions.
+## 📁 Project Structure
 
-## Requirements
+```
+📁 Your Project Folder
+ ├── chatbot_upgraded.py        ← Main application (run this)
+ ├── chatbot_knowledge.json     ← Auto-created when you run the app
+ ├── requirements.txt           ← Dependencies (all built-in)
+ └── README.md                  ← This file
+```
 
-- Python 3.x
-- Tkinter (usually included with Python)
+---
 
-## How to Use
+## 🚀 How to Run
 
-Simply run the `chatbot.py` file in Python, and the chatbot will start. Type your query in the input field and hit **Enter** or click **Send**.
+### In Visual Studio Code
+1. Open VS Code
+2. Go to `File` → `Open Folder` → select your project folder
+3. Open `chatbot_upgraded.py`
+4. Click the **▶ Run** button (top right) OR press `F5`
 
-## Customizing the Knowledge Base
+### In Terminal / Command Prompt
+```bash
+python chatbot_upgraded.py
+```
 
-You can modify the chatbot’s knowledge base by editing the `chatbot_knowledge.json` file. This includes information about business hours, policies, products, and more.
+> ✅ No pip installs needed — all libraries are built into Python.
+
+---
+
+## 🧠 Key Features & Technologies
+
+### 1. RAG — Retrieval-Augmented Generation
+- A `KnowledgeRetriever` class indexes 9 knowledge passages using **TF-IDF vectors**
+- Every user message triggers a **top-2 document retrieval** step
+- The chatbot's response is generated from the retrieved context — mimicking a real RAG pipeline
+- Retrieved documents are shown live in the UI
+
+### 2. LLM-Style Intent Classification
+- A `IntentClassifier` trained on **12 intents** (greeting, shipping, returns, pricing, warranty, etc.)
+- Uses **TF-IDF + Cosine Similarity** (nearest-centroid approach)
+- Performs a proper **75/25 train/test split**
+- Reports **train accuracy**, **test accuracy**, and **F1 score per intent** on startup
+
+### 3. Sentiment Analysis
+- Token-level sentiment scoring using positive/negative word lists
+- **Negation handling** — e.g. "not happy" is correctly classified as negative
+- Tracks sentiment history across the conversation
+- Auto-escalates to human agent after repeated negative sentiment
+
+### 4. Conversation Context Memory
+- Extracts and remembers: customer name, order number, product mentioned, reported issues
+- Uses context across turns for more relevant responses
+
+### 5. Tkinter GUI
+- Live **intent + confidence score** display per message
+- Live **RAG retrieval result** shown per message
+- **Sentiment indicator** (Positive 😊 / Negative 😞 / Neutral 😐)
+- Model metrics bar showing train/test accuracy on startup
+
+---
+
+## 📦 Dependencies
+
+| Library       | Purpose                        | Installation |
+|---------------|--------------------------------|--------------|
+| `tkinter`     | GUI framework                  | Built-in     |
+| `re`          | Regular expressions            | Built-in     |
+| `math`        | TF-IDF calculations            | Built-in     |
+| `json`        | Knowledge base storage         | Built-in     |
+| `os`          | File handling                  | Built-in     |
+| `random`      | Response variation             | Built-in     |
+| `time`        | Timestamps                     | Built-in     |
+| `collections` | Counter, defaultdict for NLP   | Built-in     |
+
+> **No external packages required.**
+
+---
+
+## 💬 Sample Queries to Try
+
+| You type...                        | Bot does...                              |
+|------------------------------------|------------------------------------------|
+| `hello`                            | Greeting response                        |
+| `what are your business hours?`    | Returns hours from knowledge base        |
+| `how do I return my laptop?`       | Return + refund policy                   |
+| `where is my order #12345?`        | Tracks order by number                   |
+| `how much does a smartphone cost?` | Retrieves pricing info                   |
+| `my device is broken`              | Technical support + troubleshooting      |
+| `I want to speak to a human`       | Escalates to human agent                 |
+| `thank you`                        | Friendly farewell                        |
+
+---
+
+## 🛠️ Troubleshooting
+
+**Tkinter not found on Windows?**
+- Uninstall Python and reinstall from [python.org](https://python.org)
+- During install, make sure **"tcl/tk and IDLE"** is checked
+
+**Python not recognized in terminal?**
+- Add Python to PATH during installation
+- Or use: `py chatbot.py` instead of `python`
+
+---
+
+## 👩‍💻 Author
+
+**Dhanashree Pogade**  
+B.Tech Data Science | Ajeenkya D Y Patil University  
+📧 dhanashreepogade7@gmail.com
