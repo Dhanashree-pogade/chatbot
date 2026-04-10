@@ -1,0 +1,18 @@
+# ============================================================
+# AI-Powered Customer Support Chatbot — Requirements
+# ============================================================
+# All dependencies are part of Python's standard library.
+# No pip install is required.
+#
+# Python version: 3.8 or higher recommended
+# ============================================================
+
+# Standard Library (built-in — no installation needed)
+# tkinter       — GUI framework
+# re            — Regular expressions / text preprocessing
+# math          — TF-IDF cosine similarity calculations
+# json          — Knowledge base persistence
+# os            — File system operations
+# random        — Response variation and train/test shuffle
+# time          — Message timestamps
+# collections   — Counter and defaultdict for NLP utilities
