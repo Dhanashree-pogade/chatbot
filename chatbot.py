@@ -1,17 +1,5 @@
-"""
-AI-Powered Customer Support Chatbot
-====================================
-Upgraded with:
-  - RAG (Retrieval-Augmented Generation) style response pipeline
-  - TF-IDF + Cosine Similarity for intent classification (LLM-style retrieval)
-  - Model Training & Evaluation (train/test split, accuracy, F1 score)
-  - Sentiment Analysis with negation handling
-  - Conversation memory / context tracking
-  - GUI via Tkinter
-"""
-
 import tkinter as tk
-from tkinter import scrolledtext, ttk
+from tkinter import scrolledtext
 import re
 import time
 import random
@@ -20,703 +8,2222 @@ import os
 import math
 from collections import Counter, defaultdict
 
-# ─────────────────────────────────────────────
-# 1.  TOKENIZER & TF-IDF UTILITIES
-# ─────────────────────────────────────────────
+
+# ============================================================
+# AI CUSTOMER SUPPORT CHATBOT
+# NLP + TF-IDF + COSINE SIMILARITY + SENTIMENT + RETRIEVAL
+# ============================================================
+
+
+# ============================================================
+# 1. TEXT PREPROCESSING
+# ============================================================
 
 def tokenize(text):
-    """Lowercase, strip punctuation, split into tokens."""
+    """
+    Lowercase text, preserve apostrophes for negation,
+    remove other punctuation and split into tokens.
+    """
     text = text.lower()
-    text = re.sub(r"[^a-z0-9\s]", " ", text)
-    return [t for t in text.split() if len(t) > 1]
+
+    # Keep apostrophes so words like don't, isn't, can't
+    # are preserved for negation handling.
+    text = re.sub(r"[^a-z0-9'\s]", " ", text)
+
+    return [
+        t for t in text.split()
+        if len(t) > 1
+    ]
 
 
 def compute_tf(tokens):
-    """Term-frequency dict for a token list."""
     freq = Counter(tokens)
+
     total = len(tokens) if tokens else 1
-    return {term: count / total for term, count in freq.items()}
+
+    return {
+        term: count / total
+        for term, count in freq.items()
+    }
 
 
 def compute_idf(corpus_tokens):
-    """Inverse-document-frequency across a list of token lists."""
     N = len(corpus_tokens)
+
     df = defaultdict(int)
+
     for doc in corpus_tokens:
         for term in set(doc):
             df[term] += 1
-    return {term: math.log((N + 1) / (count + 1)) + 1 for term, count in df.items()}
+
+    return {
+        term: math.log((N + 1) / (count + 1)) + 1
+        for term, count in df.items()
+    }
 
 
 def tfidf_vector(tokens, idf):
-    """Return a TF-IDF weighted vector (dict)."""
     tf = compute_tf(tokens)
-    return {term: tf[term] * idf.get(term, 1.0) for term in tokens}
+
+    return {
+        term: tf_value * idf.get(term, 1.0)
+        for term, tf_value in tf.items()
+    }
 
 
 def cosine_similarity(vec_a, vec_b):
-    """Cosine similarity between two TF-IDF dicts."""
+
     keys = set(vec_a) & set(vec_b)
+
     if not keys:
         return 0.0
-    dot = sum(vec_a[k] * vec_b[k] for k in keys)
-    norm_a = math.sqrt(sum(v ** 2 for v in vec_a.values()))
-    norm_b = math.sqrt(sum(v ** 2 for v in vec_b.values()))
+
+    dot = sum(
+        vec_a[k] * vec_b[k]
+        for k in keys
+    )
+
+    norm_a = math.sqrt(
+        sum(v ** 2 for v in vec_a.values())
+    )
+
+    norm_b = math.sqrt(
+        sum(v ** 2 for v in vec_b.values())
+    )
+
     if norm_a == 0 or norm_b == 0:
         return 0.0
+
     return dot / (norm_a * norm_b)
 
 
-# ─────────────────────────────────────────────
-# 2.  TRAINING DATA  (intent → sample queries)
-# ─────────────────────────────────────────────
+# ============================================================
+# 2. CUSTOM INTENT DATASET
+# ============================================================
+
+# 20 examples per intent
+# 12 intents
+# 240 examples total
+#
+# This is a custom-created prototype dataset.
+# It is NOT downloaded from Kaggle or another public dataset.
 
 INTENT_CORPUS = {
+
     "greeting": [
-        "hello", "hi there", "hey", "good morning", "good afternoon",
-        "greetings", "howdy", "what's up", "hey there", "hi bot"
+        "hello",
+        "hi",
+        "hey",
+        "good morning",
+        "good afternoon",
+        "good evening",
+        "hi there",
+        "hello there",
+        "hey there",
+        "can you help me",
+        "i need help",
+        "is anyone there",
+        "are you available",
+        "i want some help",
+        "hello assistant",
+        "hey assistant",
+        "start chat",
+        "can we chat",
+        "i have a question",
+        "i would like some help"
     ],
+
     "farewell": [
-        "bye", "goodbye", "see you later", "take care", "good night",
-        "I'm done", "that's all", "thanks and bye", "exit", "quit"
+        "bye",
+        "goodbye",
+        "see you",
+        "see you later",
+        "talk to you later",
+        "have a good day",
+        "take care",
+        "i am leaving",
+        "that's all",
+        "that is all",
+        "no more questions",
+        "i am done",
+        "end chat",
+        "thanks goodbye",
+        "bye for now",
+        "catch you later",
+        "i will come back later",
+        "have a nice day",
+        "good night",
+        "i don't need anything else"
     ],
+
     "business_hours": [
-        "when are you open", "what are your business hours", "what time do you close",
-        "are you open on weekends", "when can I call", "opening hours",
-        "what time do you open", "do you work on Saturday"
+        "what are your business hours",
+        "when are you open",
+        "when do you open",
+        "when do you close",
+        "what time do you open",
+        "what time do you close",
+        "are you open today",
+        "are you open now",
+        "what are your working hours",
+        "tell me your office hours",
+        "when can i contact you",
+        "what is your opening time",
+        "what is your closing time",
+        "do you operate on weekends",
+        "are you open on saturday",
+        "are you open on sunday",
+        "what days are you available",
+        "when is customer service available",
+        "what are your support hours",
+        "when can i speak to support"
     ],
+
     "return_refund": [
-        "how do I return an item", "refund policy", "can I get my money back",
-        "return policy", "how long for refund", "send item back",
-        "return process", "I want to return my purchase"
+        "what is your return policy",
+        "can i return a product",
+        "how can i return my order",
+        "i want a refund",
+        "how do i get a refund",
+        "can i get my money back",
+        "i want to return an item",
+        "what is the refund process",
+        "how long does a refund take",
+        "can i exchange my product",
+        "i received the wrong product",
+        "my product came wrong",
+        "i got the wrong item",
+        "the item i received is incorrect",
+        "i want to return the wrong item",
+        "how do i exchange an item",
+        "my order needs to be returned",
+        "i need to cancel and refund my order",
+        "the product is not what i ordered",
+        "what are the return conditions"
     ],
+
     "shipping": [
-        "how long does shipping take", "delivery time", "when will my order arrive",
-        "track my order", "express shipping", "shipping options",
-        "where is my package", "shipping cost", "how do I track delivery"
+        "how long will shipping take",
+        "how long does delivery take",
+        "when will my order arrive",
+        "where is my order",
+        "when can i expect delivery",
+        "how many days for shipping",
+        "how many days does delivery take",
+        "what is the delivery time",
+        "tell me about shipping",
+        "what are your shipping options",
+        "do you offer express shipping",
+        "how fast is express delivery",
+        "is standard shipping available",
+        "when will my package arrive",
+        "can i track my order",
+        "how can i track my shipment",
+        "what is the shipping time",
+        "how long until my package arrives",
+        "does shipping include tracking",
+        "what is the delivery estimate"
     ],
+
     "product_info": [
-        "tell me about your products", "what do you sell", "product details",
-        "features of laptop", "smartphone specs", "headphones review",
-        "product information", "what are the specs", "product catalogue"
+        "tell me about the smartphone",
+        "what features does the smartphone have",
+        "what are the laptop specifications",
+        "tell me about the laptop",
+        "what features do the headphones have",
+        "tell me about the headphones",
+        "what products do you sell",
+        "show me your products",
+        "what are the product features",
+        "i need product information",
+        "give me details about the smartphone",
+        "give me details about the laptop",
+        "what is included with the product",
+        "what comes with the headphones",
+        "what are the specifications",
+        "tell me more about this product",
+        "what is the battery life",
+        "does the laptop have an ssd",
+        "what is the smartphone storage",
+        "do the headphones support bluetooth"
     ],
+
     "pricing": [
-        "how much does it cost", "what is the price", "pricing details",
-        "cost of laptop", "phone price", "discount available",
-        "any offers", "how much for headphones", "price list",
-        "how much is a smartphone", "what does the laptop cost",
-        "give me a price quote", "is there a discount", "product pricing",
-        "how much for the headphones", "tell me the price"
+        "how much does the smartphone cost",
+        "what is the price of the laptop",
+        "how much are the headphones",
+        "what is the price",
+        "tell me the cost",
+        "how much does this cost",
+        "what are your prices",
+        "give me the price",
+        "how much will i pay",
+        "what is the laptop price",
+        "what is the smartphone price",
+        "what is the headphone price",
+        "how expensive is this product",
+        "can you tell me the cost",
+        "what is the current price",
+        "how much is this item",
+        "is there a price for the laptop",
+        "what does this product cost",
+        "tell me how much it is",
+        "what are the product prices"
     ],
+
     "technical_support": [
-        "my product is broken", "not working", "technical issue",
-        "device is faulty", "error on screen", "need help fixing",
-        "troubleshoot my device", "problem with order", "defective product"
+        "my device is not working",
+        "i need technical support",
+        "my laptop is not working",
+        "my smartphone is not working",
+        "my headphones are not working",
+        "the device has stopped working",
+        "i have a technical problem",
+        "something is wrong with my device",
+        "my product is malfunctioning",
+        "the device keeps crashing",
+        "my laptop keeps freezing",
+        "my phone keeps restarting",
+        "the headphones are not connecting",
+        "bluetooth is not working",
+        "the product has an error",
+        "i need help fixing my device",
+        "can you troubleshoot my device",
+        "i have a software problem",
+        "my device is giving an error",
+        "i cannot use my product"
     ],
+
     "contact_info": [
-        "how can I contact you", "customer support number", "email address",
-        "phone number", "website link", "reach your team",
-        "how do I get in touch", "support email"
+        "how can i contact you",
+        "what is your contact number",
+        "what is your phone number",
+        "give me your email",
+        "what is your email address",
+        "how do i contact support",
+        "where can i contact you",
+        "how can i reach customer service",
+        "give me your contact details",
+        "what are your contact details",
+        "how do i reach you",
+        "what is the support email",
+        "can i call customer service",
+        "where is your contact information",
+        "i need your phone number",
+        "i need your email",
+        "how can i get in touch",
+        "what is the customer care number",
+        "how do i communicate with support",
+        "where can i find support contact"
     ],
+
     "warranty": [
-        "warranty details", "is my product under warranty", "guarantee policy",
-        "warranty period", "how long is the warranty", "warranty claim"
+        "what is your warranty policy",
+        "does this product have warranty",
+        "how long is the warranty",
+        "is the laptop under warranty",
+        "is the smartphone covered by warranty",
+        "are headphones covered by warranty",
+        "what does the warranty cover",
+        "how can i claim warranty",
+        "how do i use my warranty",
+        "when does the warranty expire",
+        "is there a product warranty",
+        "tell me about the warranty",
+        "what are the warranty terms",
+        "can i get a warranty replacement",
+        "does warranty cover damage",
+        "does warranty cover defects",
+        "how long does warranty last",
+        "is my product still under warranty",
+        "what is included in the warranty",
+        "i need warranty support"
     ],
+
     "human_agent": [
-        "I want to speak to a human", "connect me to an agent",
-        "talk to representative", "real person please", "human support",
-        "escalate my issue", "transfer to agent"
+        "i want to speak to a human",
+        "connect me to an agent",
+        "can i talk to a real person",
+        "i need a human agent",
+        "transfer me to customer service",
+        "i want a customer support agent",
+        "can someone from support help me",
+        "connect me with a representative",
+        "i need to talk to someone",
+        "give me a human representative",
+        "i don't want a chatbot",
+        "can i speak with a person",
+        "please connect me to support",
+        "i need a live agent",
+        "get me a customer service representative",
+        "can a human help me",
+        "i want live support",
+        "transfer me to a person",
+        "let me talk to an employee",
+        "i need human assistance"
     ],
+
     "thanks": [
-        "thank you", "thanks a lot", "many thanks", "much appreciated",
-        "great help", "you're helpful", "awesome thanks", "cheers"
+        "thank you",
+        "thanks",
+        "thanks for your help",
+        "thank you for helping",
+        "i appreciate your help",
+        "that was helpful",
+        "very helpful",
+        "great help",
+        "thanks a lot",
+        "thank you so much",
+        "i am happy with your help",
+        "i am satisfied with the support",
+        "i am happy with my order",
+        "i am satisfied with my order",
+        "i love the product",
+        "the product is great",
+        "i am very happy",
+        "excellent service",
+        "good service",
+        "you helped me a lot"
     ]
 }
 
 
-# ─────────────────────────────────────────────
-# 3.  INTENT CLASSIFIER  (train + evaluate)
-# ─────────────────────────────────────────────
+# ============================================================
+# 3. INTENT CLASSIFIER
+# ============================================================
 
 class IntentClassifier:
-    """
-    Nearest-centroid TF-IDF classifier — analogous to a lightweight
-    retrieval step in a RAG pipeline.
-    """
 
-    def __init__(self):
+    def __init__(self, similarity_threshold=0.12):
+
         self.idf = {}
-        self.centroids = {}        # intent → mean TF-IDF vector
+
+        self.centroids = {}
+
         self.train_accuracy = 0.0
+
         self.test_accuracy = 0.0
+
         self.f1_scores = {}
+
         self.is_trained = False
 
-    # ── helpers ──────────────────────────────
-    def _build_dataset(self, corpus):
-        """Flatten corpus into (tokens, label) pairs."""
+        self.similarity_threshold = similarity_threshold
+
+
+    def _build_dataset(self):
+
         data = []
-        for intent, examples in corpus.items():
-            for ex in examples:
-                data.append((tokenize(ex), intent))
+
+        for label, examples in INTENT_CORPUS.items():
+
+            for text in examples:
+
+                data.append(
+                    (tokenize(text), label)
+                )
+
         return data
 
-    def _train_test_split(self, data, test_ratio=0.25, seed=42):
-        random.seed(seed)
-        shuffled = data[:]
-        random.shuffle(shuffled)
-        split = int(len(shuffled) * (1 - test_ratio))
-        return shuffled[:split], shuffled[split:]
+
+    def _train_test_split(
+        self,
+        data,
+        test_ratio=0.25,
+        seed=42
+    ):
+
+        """
+        Stratified split.
+
+        This ensures every intent is represented
+        in both training and testing data.
+        """
+
+        rng = random.Random(seed)
+
+        grouped = defaultdict(list)
+
+        for tokens, label in data:
+
+            grouped[label].append(
+                (tokens, label)
+            )
+
+        train_data = []
+
+        test_data = []
+
+        for label, items in grouped.items():
+
+            rng.shuffle(items)
+
+            test_count = max(
+                1,
+                round(len(items) * test_ratio)
+            )
+
+            # Keep at least one training example.
+            if test_count >= len(items):
+
+                test_count = len(items) - 1
+
+            test_data.extend(
+                items[:test_count]
+            )
+
+            train_data.extend(
+                items[test_count:]
+            )
+
+        rng.shuffle(train_data)
+
+        rng.shuffle(test_data)
+
+        return train_data, test_data
+
 
     def _compute_centroid(self, vectors):
-        """Average a list of TF-IDF dicts into one centroid vector."""
-        centroid = defaultdict(float)
+
+        if not vectors:
+
+            return {}
+
+        sums = defaultdict(float)
+
         for vec in vectors:
-            for term, val in vec.items():
-                centroid[term] += val
-        n = len(vectors)
-        return {t: v / n for t, v in centroid.items()}
 
-    def _predict(self, tokens):
-        vec = tfidf_vector(tokens, self.idf)
-        scores = {intent: cosine_similarity(vec, c) for intent, c in self.centroids.items()}
-        return max(scores, key=scores.get), max(scores.values())
+            for term, value in vec.items():
 
-    def _accuracy(self, dataset):
-        correct = sum(1 for tokens, label in dataset if self._predict(tokens)[0] == label)
-        return correct / len(dataset) if dataset else 0.0
+                sums[term] += value
 
-    def _f1(self, dataset):
-        intents = list(self.centroids.keys())
-        tp = defaultdict(int); fp = defaultdict(int); fn = defaultdict(int)
-        for tokens, label in dataset:
-            pred, _ = self._predict(tokens)
-            if pred == label:
-                tp[label] += 1
-            else:
-                fp[pred] += 1
-                fn[label] += 1
-        f1 = {}
-        for intent in intents:
-            precision = tp[intent] / (tp[intent] + fp[intent] + 1e-9)
-            recall    = tp[intent] / (tp[intent] + fn[intent] + 1e-9)
-            f1[intent] = 2 * precision * recall / (precision + recall + 1e-9)
-        return f1
-
-    # ── public API ───────────────────────────
-    def train(self, corpus=INTENT_CORPUS):
-        dataset = self._build_dataset(corpus)
-        train_data, test_data = self._train_test_split(dataset, test_ratio=0.25)
-
-        # Build IDF over training corpus only
-        self.idf = compute_idf([tokens for tokens, _ in train_data])
-
-        # Build per-intent centroids
-        intent_vecs = defaultdict(list)
-        for tokens, label in train_data:
-            intent_vecs[label].append(tfidf_vector(tokens, self.idf))
-        self.centroids = {intent: self._compute_centroid(vecs)
-                          for intent, vecs in intent_vecs.items()}
-
-        # Evaluate
-        self.train_accuracy = self._accuracy(train_data)
-        self.test_accuracy  = self._accuracy(test_data)
-        self.f1_scores      = self._f1(test_data)
-        self.is_trained     = True
+        count = len(vectors)
 
         return {
-            "train_samples": len(train_data),
-            "test_samples":  len(test_data),
-            "train_accuracy": round(self.train_accuracy * 100, 2),
-            "test_accuracy":  round(self.test_accuracy  * 100, 2),
-            "f1_scores":      {k: round(v, 3) for k, v in self.f1_scores.items()}
+            term: value / count
+            for term, value in sums.items()
         }
+
+
+    def _predict(self, tokens):
+
+        vec = tfidf_vector(
+            tokens,
+            self.idf
+        )
+
+        if not vec:
+
+            return "unknown", 0.0
+
+        best_intent = "unknown"
+
+        best_score = 0.0
+
+        for intent, centroid in self.centroids.items():
+
+            score = cosine_similarity(
+                vec,
+                centroid
+            )
+
+            if score > best_score:
+
+                best_score = score
+
+                best_intent = intent
+
+        if best_score < self.similarity_threshold:
+
+            return "unknown", best_score
+
+        return best_intent, best_score
+
+
+    def _accuracy(self, data):
+
+        if not data:
+
+            return 0.0
+
+        correct = 0
+
+        for tokens, label in data:
+
+            prediction, _ = self._predict(
+                tokens
+            )
+
+            if prediction == label:
+
+                correct += 1
+
+        return correct / len(data)
+
+
+    def _f1(self, data):
+
+        labels = list(
+            self.centroids.keys()
+        )
+
+        scores = {}
+
+        for label in labels:
+
+            tp = 0
+            fp = 0
+            fn = 0
+
+            for tokens, actual in data:
+
+                predicted, _ = self._predict(
+                    tokens
+                )
+
+                if (
+                    predicted == label
+                    and actual == label
+                ):
+
+                    tp += 1
+
+                elif (
+                    predicted == label
+                    and actual != label
+                ):
+
+                    fp += 1
+
+                elif (
+                    predicted != label
+                    and actual == label
+                ):
+
+                    fn += 1
+
+            precision = (
+                tp / (tp + fp)
+                if (tp + fp)
+                else 0.0
+            )
+
+            recall = (
+                tp / (tp + fn)
+                if (tp + fn)
+                else 0.0
+            )
+
+            if precision + recall:
+
+                f1 = (
+                    2 * precision * recall
+                    / (precision + recall)
+                )
+
+            else:
+
+                f1 = 0.0
+
+            scores[label] = f1
+
+        return scores
+
+
+    def train(self):
+
+        data = self._build_dataset()
+
+        train_data, test_data = (
+            self._train_test_split(
+                data,
+                test_ratio=0.25,
+                seed=42
+            )
+        )
+
+        # IDF is learned only from training data.
+        training_tokens = [
+            tokens
+            for tokens, _ in train_data
+        ]
+
+        self.idf = compute_idf(
+            training_tokens
+        )
+
+        grouped_vectors = defaultdict(list)
+
+        for tokens, label in train_data:
+
+            vector = tfidf_vector(
+                tokens,
+                self.idf
+            )
+
+            grouped_vectors[label].append(
+                vector
+            )
+
+        self.centroids = {
+            label: self._compute_centroid(
+                vectors
+            )
+            for label, vectors
+            in grouped_vectors.items()
+        }
+
+        self.train_accuracy = (
+            self._accuracy(train_data)
+        )
+
+        self.test_accuracy = (
+            self._accuracy(test_data)
+        )
+
+        self.f1_scores = self._f1(
+            test_data
+        )
+
+        self.is_trained = True
+
+        return {
+
+            "train_samples":
+                len(train_data),
+
+            "test_samples":
+                len(test_data),
+
+            "total_samples":
+                len(data),
+
+            "num_intents":
+                len(INTENT_CORPUS),
+
+            "train_accuracy":
+                self.train_accuracy * 100,
+
+            "test_accuracy":
+                self.test_accuracy * 100,
+
+            "f1_scores":
+                self.f1_scores
+        }
+
 
     def classify(self, text):
+
         if not self.is_trained:
+
             self.train()
+
         tokens = tokenize(text)
+
         if not tokens:
+
             return "unknown", 0.0
-        intent, score = self._predict(tokens)
-        return intent, round(score, 4)
+
+        return self._predict(tokens)
 
 
-# ─────────────────────────────────────────────
-# 4.  RAG KNOWLEDGE RETRIEVER
-# ─────────────────────────────────────────────
-
-class KnowledgeRetriever:
-    """
-    Lightweight RAG retriever:
-    1. Index documents (passages) with TF-IDF
-    2. At query time, retrieve the top-k most similar passages
-    3. The chatbot's response is generated from the retrieved context
-    """
-
-    def __init__(self):
-        self.documents = []      # list of {"id": ..., "text": ..., "meta": ...}
-        self.doc_vectors = []
-        self.idf = {}
-
-    def index(self, documents):
-        """Index a list of document dicts with 'id', 'text', 'meta' keys."""
-        self.documents = documents
-        corpus_tokens = [tokenize(doc["text"]) for doc in documents]
-        self.idf = compute_idf(corpus_tokens)
-        self.doc_vectors = [tfidf_vector(tok, self.idf) for tok in corpus_tokens]
-
-    def retrieve(self, query, top_k=2):
-        """Return top-k most relevant documents for the query."""
-        q_tokens = tokenize(query)
-        q_vec = tfidf_vector(q_tokens, self.idf)
-        scores = [cosine_similarity(q_vec, dv) for dv in self.doc_vectors]
-        ranked = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
-        return [(self.documents[i], score) for i, score in ranked[:top_k] if score > 0.0]
-
-
-# ─────────────────────────────────────────────
-# 5.  SENTIMENT ANALYSER
-# ─────────────────────────────────────────────
-
-POSITIVE_WORDS = {
-    "happy", "satisfied", "great", "good", "excellent", "love", "like",
-    "thanks", "thank", "awesome", "amazing", "perfect", "wonderful",
-    "fantastic", "helpful", "pleased", "glad", "appreciate", "impressive",
-    "enjoy", "nice", "superb", "outstanding", "brilliant"
-}
-
-NEGATIVE_WORDS = {
-    "unhappy", "dissatisfied", "bad", "poor", "terrible", "hate", "dislike",
-    "angry", "disappointed", "horrible", "awful", "useless", "worst",
-    "frustrating", "annoying", "slow", "expensive", "broken", "faulty",
-    "complaint", "issue", "problem", "waste", "fail", "defective", "refund"
-}
-
-NEGATIONS = {"not", "no", "never", "don't", "doesn't", "didn't",
-             "wasn't", "aren't", "isn't", "hardly", "barely"}
-
-
-def analyze_sentiment(text):
-    tokens = tokenize(text)
-    pos = neg = 0
-    negate = False
-    for tok in tokens:
-        if tok in NEGATIONS:
-            negate = True
-            continue
-        if tok in POSITIVE_WORDS:
-            if negate:
-                neg += 1
-            else:
-                pos += 1
-        elif tok in NEGATIVE_WORDS:
-            if negate:
-                pos += 1
-            else:
-                neg += 1
-        negate = False
-    if pos > neg:
-        return "positive"
-    elif neg > pos:
-        return "negative"
-    return "neutral"
-
-
-# ─────────────────────────────────────────────
-# 6.  KNOWLEDGE BASE  (used as RAG documents)
-# ─────────────────────────────────────────────
-
-DEFAULT_KB = {
-    "business": {
-        "hours": "Monday to Friday 9 AM – 5 PM, Saturday 10 AM – 2 PM",
-        "location": "123 Main Street, Business City",
-        "contact": {
-            "phone": "1-800-555-1234",
-            "email": "support@example.com",
-            "website": "www.example.com"
-        }
-    },
-    "policies": {
-        "return": "Returns accepted within 30 days with a valid receipt",
-        "refund": "Refunds processed within 5-7 business days",
-        "warranty": "1-year warranty covering manufacturing defects",
-        "shipping": "Standard 3-5 days; express 1-2 days"
-    },
-    "products": {
-        "electronics": {
-            "smartphone": {"price": "$599-$999",  "features": "Latest processor, 5G, high-resolution camera"},
-            "laptop":     {"price": "$799-$1599", "features": "Fast CPU, long battery, lightweight"},
-            "headphones": {"price": "$99-$299",   "features": "Noise cancellation, wireless, long battery"}
-        }
-    }
-}
+# ============================================================
+# 4. KNOWLEDGE RETRIEVER
+# ============================================================
 
 RAG_DOCUMENTS = [
-    {"id": "hours",    "text": "business hours open close time Monday Friday Saturday", "meta": "business_hours"},
-    {"id": "return",   "text": "return refund policy send back money purchase receipt",  "meta": "return_refund"},
-    {"id": "shipping", "text": "shipping delivery tracking order arrive express standard","meta": "shipping"},
-    {"id": "product",  "text": "product information specs features smartphone laptop headphones electronics", "meta": "product_info"},
-    {"id": "pricing",  "text": "price cost discount offer how much pricing",             "meta": "pricing"},
-    {"id": "warranty", "text": "warranty guarantee policy defect manufacturing claim",   "meta": "warranty"},
-    {"id": "contact",  "text": "contact phone email website support reach team",         "meta": "contact_info"},
-    {"id": "support",  "text": "broken defective not working technical issue troubleshoot error fault repair", "meta": "technical_support"},
-    {"id": "agent",    "text": "human agent representative escalate real person speak transfer", "meta": "human_agent"},
+
+    {
+        "text":
+        "Standard shipping takes 3-5 business days. "
+        "Express shipping takes 1-2 business days. "
+        "Customers can provide an order number for tracking.",
+
+        "meta":
+        "shipping"
+    },
+
+    {
+        "text":
+        "Customers can request a return within 30 days "
+        "of delivery if the product is eligible. "
+        "Refunds are processed after the returned item "
+        "is received and inspected.",
+
+        "meta":
+        "return_refund"
+    },
+
+    {
+        "text":
+        "Smartphone: 6.5 inch display, 128GB storage, "
+        "8GB RAM. Laptop: 15.6 inch display, 512GB SSD, "
+        "16GB RAM. Headphones: Bluetooth, noise cancellation, "
+        "and up to 30 hours battery life.",
+
+        "meta":
+        "product_info"
+    },
+
+    {
+        "text":
+        "The smartphone costs $499, the laptop costs $999, "
+        "and the headphones cost $149.",
+
+        "meta":
+        "pricing"
+    },
+
+    {
+        "text":
+        "Customer support is available Monday to Friday "
+        "from 9 AM to 6 PM.",
+
+        "meta":
+        "business_hours"
+    },
+
+    {
+        "text":
+        "Products include a limited warranty covering "
+        "manufacturing defects. Warranty duration depends "
+        "on the product.",
+
+        "meta":
+        "warranty"
+    },
+
+    {
+        "text":
+        "For technical issues, restart the device, check "
+        "software updates, and contact technical support "
+        "if the issue continues.",
+
+        "meta":
+        "technical_support"
+    },
+
+    {
+        "text":
+        "Customers can contact support through the customer "
+        "service phone number or support email.",
+
+        "meta":
+        "contact_info"
+    },
+
+    {
+        "text":
+        "Customers can request a human support representative "
+        "when they need assistance that the automated assistant "
+        "cannot provide.",
+
+        "meta":
+        "human_agent"
+    }
 ]
 
 
-# ─────────────────────────────────────────────
-# 7.  CHATBOT APPLICATION
-# ─────────────────────────────────────────────
+class KnowledgeRetriever:
+
+    def __init__(self):
+
+        self.documents = []
+
+        self.doc_vectors = []
+
+        self.idf = {}
+
+
+    def index(self, documents):
+
+        self.documents = documents
+
+        corpus_tokens = [
+            tokenize(doc["text"])
+            for doc in documents
+        ]
+
+        self.idf = compute_idf(
+            corpus_tokens
+        )
+
+        self.doc_vectors = [
+
+            tfidf_vector(
+                tokens,
+                self.idf
+            )
+
+            for tokens in corpus_tokens
+        ]
+
+
+    def retrieve(
+        self,
+        query,
+        top_k=2
+    ):
+
+        if not self.documents:
+
+            return []
+
+        q_tokens = tokenize(query)
+
+        q_vec = tfidf_vector(
+            q_tokens,
+            self.idf
+        )
+
+        scored = []
+
+        for i, vec in enumerate(
+            self.doc_vectors
+        ):
+
+            score = cosine_similarity(
+                q_vec,
+                vec
+            )
+
+            if score > 0:
+
+                scored.append(
+                    (
+                        score,
+                        self.documents[i]
+                    )
+                )
+
+        scored.sort(
+            key=lambda x: x[0],
+            reverse=True
+        )
+
+        return scored[:top_k]
+
+
+# ============================================================
+# 5. SENTIMENT ANALYSIS
+# ============================================================
+
+POSITIVE_WORDS = {
+
+    "good",
+    "great",
+    "excellent",
+    "amazing",
+    "happy",
+    "satisfied",
+    "love",
+    "helpful",
+    "perfect",
+    "awesome",
+    "nice",
+    "thanks",
+    "thank",
+    "wonderful",
+    "fantastic",
+    "best",
+    "pleased",
+    "enjoy",
+    "enjoyed",
+    "impressed"
+}
+
+
+NEGATIVE_WORDS = {
+
+    "bad",
+    "terrible",
+    "awful",
+    "poor",
+    "worst",
+    "angry",
+    "upset",
+    "sad",
+    "hate",
+    "horrible",
+    "disappointed",
+    "disappointing",
+    "wrong",
+    "broken",
+    "useless",
+    "frustrated",
+    "frustrating",
+    "annoyed",
+    "problem",
+    "issue",
+    "failed",
+    "failure"
+}
+
+
+NEGATIONS = {
+
+    "not",
+    "no",
+    "never",
+    "don't",
+    "doesn't",
+    "didn't",
+    "wasn't",
+    "weren't",
+    "isn't",
+    "aren't",
+    "can't",
+    "cannot",
+    "won't"
+}
+
+
+def analyze_sentiment(text):
+
+    tokens = tokenize(text)
+
+    positive = 0
+
+    negative = 0
+
+    negate_next = False
+
+    for token in tokens:
+
+        if token in NEGATIONS:
+
+            negate_next = True
+
+            continue
+
+        if token in POSITIVE_WORDS:
+
+            if negate_next:
+
+                negative += 1
+
+            else:
+
+                positive += 1
+
+            negate_next = False
+
+        elif token in NEGATIVE_WORDS:
+
+            if negate_next:
+
+                positive += 1
+
+            else:
+
+                negative += 1
+
+            negate_next = False
+
+        elif negate_next:
+
+            negate_next = False
+
+    if positive > negative:
+
+        return "Positive"
+
+    elif negative > positive:
+
+        return "Negative"
+
+    else:
+
+        return "Neutral"
+
+
+# ============================================================
+# 6. KNOWLEDGE BASE
+# ============================================================
+
+DEFAULT_KB = {
+
+    "business_hours": {
+
+        "response":
+        "Our customer support is available "
+        "Monday to Friday, 9 AM to 6 PM."
+    },
+
+    "return_refund": {
+
+        "response":
+        "You can request a return within 30 days "
+        "of delivery for eligible products. "
+        "Refunds are processed after inspection."
+    },
+
+    "shipping": {
+
+        "response":
+        "Standard shipping takes 3-5 business days; "
+        "express shipping takes 1-2 days."
+    },
+
+    "warranty": {
+
+        "response":
+        "Our products include a limited warranty "
+        "covering eligible manufacturing defects. "
+        "The duration depends on the product."
+    },
+
+    "contact_info": {
+
+        "response":
+        "You can contact customer support through "
+        "our support phone number or email."
+    },
+
+    "technical_support": {
+
+        "response":
+        "Please restart the device and check for "
+        "software updates. If the issue continues, "
+        "I can connect you to technical support."
+    },
+
+    "human_agent": {
+
+        "response":
+        "Sure. I can help connect you with a human "
+        "customer-support representative."
+    },
+
+    "thanks": {
+
+        "response":
+        "You're very welcome! I'm happy to help."
+    },
+
+    "greeting": {
+
+        "response":
+        "Hello! I'm your AI-powered customer support "
+        "assistant. Ask me about orders, returns, "
+        "products, shipping, and more! 😊"
+    },
+
+    "farewell": {
+
+        "response":
+        "Goodbye! Have a great day."
+    },
+
+    "product_info": {
+
+        "smartphone":
+        "The smartphone has a 6.5 inch display, "
+        "128GB storage, and 8GB RAM.",
+
+        "laptop":
+        "The laptop has a 15.6 inch display, "
+        "512GB SSD, and 16GB RAM.",
+
+        "headphones":
+        "The headphones support Bluetooth, "
+        "noise cancellation, and up to 30 hours "
+        "of battery life."
+    },
+
+    "pricing": {
+
+        "smartphone":
+        "The smartphone costs $499.",
+
+        "laptop":
+        "The laptop costs $999.",
+
+        "headphones":
+        "The headphones cost $149."
+    }
+}
+
+
+# ============================================================
+# 7. CHATBOT APPLICATION
+# ============================================================
 
 class CustomerServiceChatbot:
+
     def __init__(self, root):
+
         self.root = root
-        self.root.title("AI Customer Support Chatbot  |  RAG + LLM-style NLP")
-        self.root.geometry("750x620")
-        self.root.resizable(True, True)
-        self.root.configure(bg="#f0f4f8")
 
-        # ── Models ──────────────────────────
-        self.classifier = IntentClassifier()
-        self.retriever  = KnowledgeRetriever()
-        self.retriever.index(RAG_DOCUMENTS)
-        self.knowledge_base = self._load_knowledge_base()
+        self.root.title(
+            "AI Customer Support | NLP + Intent Classification"
+        )
 
-        # ── State ───────────────────────────
-        self.conversation_history = []   # list of {"role": "user"|"bot", "text": ..., "intent": ...}
+        self.root.geometry(
+            "950x820"
+        )
+
+        self.root.minsize(
+            800,
+            650
+        )
+
+        self.classifier = IntentClassifier(
+            similarity_threshold=0.12
+        )
+
+        self.retriever = KnowledgeRetriever()
+
+        self.retriever.index(
+            RAG_DOCUMENTS
+        )
+
+        self.knowledge_base = (
+            self._load_knowledge_base()
+        )
+
         self.context = {
+
             "customer_name": None,
+
             "current_product": None,
+
             "mentioned_issues": [],
+
             "order_number": None,
+
             "last_intent": None
         }
+
+        self.conversation_history = []
+
         self.sentiment_history = []
-        self.current_sentiment = "neutral"
+
+        self.current_sentiment = "Neutral"
+
         self.model_metrics = {}
 
-        # ── UI ──────────────────────────────
         self._build_ui()
 
-        # ── Train on startup ────────────────
-        self.root.after(200, self._train_and_report)
+        self.root.after(
+            200,
+            self._train_and_report
+        )
 
-    # ─────────────── UI SETUP ────────────────
+
+    # ========================================================
+    # UI
+    # ========================================================
 
     def _build_ui(self):
-        # Title bar
-        title_frame = tk.Frame(self.root, bg="#1a3c5e", pady=6)
-        title_frame.pack(fill=tk.X)
-        tk.Label(title_frame, text="🤖  AI Customer Support  |  RAG · Sentiment · Intent Classification",
-                 font=("Arial", 11, "bold"), bg="#1a3c5e", fg="white").pack()
 
-        # Main chat area
-        chat_frame = tk.Frame(self.root, bg="#f0f4f8")
-        chat_frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=(8, 4))
-
-        self.chat_display = scrolledtext.ScrolledText(
-            chat_frame, wrap=tk.WORD, font=("Arial", 10),
-            bg="white", relief=tk.FLAT, bd=1
+        header = tk.Frame(
+            self.root,
+            bg="#20466b",
+            height=55
         )
-        self.chat_display.pack(fill=tk.BOTH, expand=True)
-        self.chat_display.config(state=tk.DISABLED)
-        self.chat_display.tag_config("user_msg", foreground="#1a3c5e", font=("Arial", 10, "bold"))
-        self.chat_display.tag_config("bot_msg",  foreground="#2e7d32", font=("Arial", 10))
-        self.chat_display.tag_config("sys_msg",  foreground="#888888", font=("Arial", 9, "italic"))
 
-        # Metrics bar
-        metrics_frame = tk.Frame(self.root, bg="#e8edf2", pady=3)
-        metrics_frame.pack(fill=tk.X, padx=12)
+        header.pack(
+            fill="x"
+        )
+
+        title = tk.Label(
+
+            header,
+
+            text=
+            "🤖 AI Customer Support | "
+            "NLP • Sentiment • Intent Classification",
+
+            bg="#20466b",
+
+            fg="white",
+
+            font=(
+                "Segoe UI",
+                15,
+                "bold"
+            )
+        )
+
+        title.pack(
+            pady=14
+        )
+
+
+        self.chat = scrolledtext.ScrolledText(
+
+            self.root,
+
+            wrap=tk.WORD,
+
+            font=(
+                "Segoe UI",
+                11
+            ),
+
+            state="disabled"
+        )
+
+        self.chat.pack(
+
+            fill="both",
+
+            expand=True,
+
+            padx=12,
+
+            pady=(10, 5)
+        )
+
+
         self.metrics_label = tk.Label(
-            metrics_frame, text="⏳ Training intent classifier...",
-            font=("Arial", 9), bg="#e8edf2", fg="#555555", anchor=tk.W
-        )
-        self.metrics_label.pack(fill=tk.X, padx=4)
 
-        # Status / sentiment bar
-        status_frame = tk.Frame(self.root, bg="#dde3ea", pady=3)
-        status_frame.pack(fill=tk.X, padx=12)
+            self.root,
+
+            text="Model: Training...",
+
+            anchor="w",
+
+            font=(
+                "Segoe UI",
+                10,
+                "italic"
+            )
+        )
+
+        self.metrics_label.pack(
+
+            fill="x",
+
+            padx=12
+        )
+
+
+        info_frame = tk.Frame(
+            self.root
+        )
+
+        info_frame.pack(
+
+            fill="x",
+
+            padx=12,
+
+            pady=5
+        )
+
+
         self.intent_label = tk.Label(
-            status_frame, text="Intent: —",
-            font=("Arial", 9), bg="#dde3ea", fg="#333333", anchor=tk.W, width=35
+
+            info_frame,
+
+            text="Intent: -",
+
+            anchor="w",
+
+            font=(
+                "Segoe UI",
+                10
+            )
         )
-        self.intent_label.pack(side=tk.LEFT, padx=4)
+
+        self.intent_label.pack(
+
+            side="left",
+
+            fill="x",
+
+            expand=True
+        )
+
+
         self.sentiment_label = tk.Label(
-            status_frame, text="Sentiment: Neutral 😐",
-            font=("Arial", 9), bg="#dde3ea", fg="blue", anchor=tk.E
-        )
-        self.sentiment_label.pack(side=tk.RIGHT, padx=4)
 
-        # RAG retrieval label
+            info_frame,
+
+            text="Sentiment: Neutral",
+
+            anchor="e",
+
+            font=(
+                "Segoe UI",
+                10
+            )
+        )
+
+        self.sentiment_label.pack(
+
+            side="right",
+
+            fill="x",
+
+            expand=True
+        )
+
+
         self.rag_label = tk.Label(
-            self.root, text="RAG: —",
-            font=("Arial", 9, "italic"), bg="#f0f4f8", fg="#888888", anchor=tk.W
-        )
-        self.rag_label.pack(fill=tk.X, padx=16)
 
-        # Input row
-        input_frame = tk.Frame(self.root, bg="#f0f4f8", pady=8)
-        input_frame.pack(fill=tk.X, padx=12)
-        self.user_input = tk.Entry(
-            input_frame, font=("Arial", 11), relief=tk.SOLID, bd=1
-        )
-        self.user_input.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
-        self.user_input.bind("<Return>", self.process_input)
-        send_btn = tk.Button(
-            input_frame, text="Send ➤", command=self.process_input,
-            bg="#1a3c5e", fg="white", font=("Arial", 10, "bold"),
-            relief=tk.FLAT, padx=12, pady=4
-        )
-        send_btn.pack(side=tk.RIGHT)
+            self.root,
 
-    # ─────────── TRAINING + METRICS ──────────
+            text="Knowledge Retrieval: -",
+
+            anchor="w",
+
+            font=(
+                "Segoe UI",
+                9,
+                "italic"
+            )
+        )
+
+        self.rag_label.pack(
+
+            fill="x",
+
+            padx=12
+        )
+
+
+        input_frame = tk.Frame(
+            self.root
+        )
+
+        input_frame.pack(
+
+            fill="x",
+
+            padx=12,
+
+            pady=10
+        )
+
+
+        self.input_box = tk.Entry(
+
+            input_frame,
+
+            font=(
+                "Segoe UI",
+                12
+            )
+        )
+
+        self.input_box.pack(
+
+            side="left",
+
+            fill="x",
+
+            expand=True,
+
+            ipady=8
+        )
+
+        self.input_box.bind(
+
+            "<Return>",
+
+            lambda event:
+            self.process_input()
+        )
+
+
+        send_button = tk.Button(
+
+            input_frame,
+
+            text="Send ➜",
+
+            command=self.process_input,
+
+            bg="#20466b",
+
+            fg="white",
+
+            font=(
+                "Segoe UI",
+                11,
+                "bold"
+            ),
+
+            padx=20,
+
+            pady=8
+        )
+
+        send_button.pack(
+
+            side="right",
+
+            padx=(8, 0)
+        )
+
+
+    def _append_message(
+        self,
+        speaker,
+        message
+    ):
+
+        self.chat.config(
+            state="normal"
+        )
+
+        timestamp = time.strftime(
+            "%H:%M"
+        )
+
+        self.chat.insert(
+
+            tk.END,
+
+            f"{timestamp}  "
+            f"{speaker}: "
+            f"{message}\n\n"
+        )
+
+        self.chat.see(
+            tk.END
+        )
+
+        self.chat.config(
+            state="disabled"
+        )
+
+
+    # ========================================================
+    # MODEL TRAINING
+    # ========================================================
 
     def _train_and_report(self):
-        metrics = self.classifier.train()
-        self.model_metrics = metrics
-        summary = (
-            f"✅ Model trained  |  Train acc: {metrics['train_accuracy']}%  "
-            f"|  Test acc: {metrics['test_accuracy']}%  "
-            f"|  Samples: {metrics['train_samples']} train / {metrics['test_samples']} test"
-        )
-        self.metrics_label.config(text=summary)
-        self._post_system_message(f"[Model] {summary}")
-        self._post_bot_message(
-            "Hello! I'm your AI-powered customer support assistant. "
-            "Ask me about orders, returns, products, shipping, and more! 😊"
+
+        self.model_metrics = (
+            self.classifier.train()
         )
 
-    # ─────────── KNOWLEDGE BASE I/O ──────────
+        train_acc = (
+            self.model_metrics[
+                "train_accuracy"
+            ]
+        )
+
+        test_acc = (
+            self.model_metrics[
+                "test_accuracy"
+            ]
+        )
+
+        train_n = (
+            self.model_metrics[
+                "train_samples"
+            ]
+        )
+
+        test_n = (
+            self.model_metrics[
+                "test_samples"
+            ]
+        )
+
+        total_n = (
+            self.model_metrics[
+                "total_samples"
+            ]
+        )
+
+        intents_n = (
+            self.model_metrics[
+                "num_intents"
+            ]
+        )
+
+        f1_scores = (
+            self.model_metrics[
+                "f1_scores"
+            ]
+        )
+
+        macro_f1 = (
+            sum(f1_scores.values())
+            / len(f1_scores)
+            if f1_scores
+            else 0.0
+        )
+
+        text = (
+
+            f"☑ Model trained | "
+
+            f"Train acc: "
+            f"{train_acc:.2f}% | "
+
+            f"Test acc: "
+            f"{test_acc:.2f}% | "
+
+            f"Macro F1: "
+            f"{macro_f1:.2f} | "
+
+            f"Samples: "
+            f"{train_n} train / "
+            f"{test_n} test | "
+
+            f"Total: "
+            f"{total_n} | "
+
+            f"Intents: "
+            f"{intents_n}"
+        )
+
+        self.metrics_label.config(
+            text=text
+        )
+
+        self._append_message(
+            "[Model]",
+            text
+        )
+
+        self._append_message(
+
+            "Bot",
+
+            self.knowledge_base[
+                "greeting"
+            ][
+                "response"
+            ]
+        )
+
+
+    # ========================================================
+    # KNOWLEDGE BASE
+    # ========================================================
 
     def _load_knowledge_base(self):
-        if os.path.exists("chatbot_knowledge.json"):
+
+        filename = (
+            "chatbot_knowledge.json"
+        )
+
+        if os.path.exists(
+            filename
+        ):
+
             try:
-                with open("chatbot_knowledge.json") as f:
-                    return json.load(f)
-            except Exception:
+
+                with open(
+                    filename,
+                    "r",
+                    encoding="utf-8"
+                ) as file:
+
+                    return json.load(
+                        file
+                    )
+
+            except (
+                json.JSONDecodeError,
+                OSError
+            ):
+
                 pass
+
         return DEFAULT_KB
 
+
     def _save_knowledge_base(self):
-        with open("chatbot_knowledge.json", "w") as f:
-            json.dump(self.knowledge_base, f, indent=4)
 
-    # ─────────── CHAT DISPLAY ────────────────
+        try:
 
-    def _post_message(self, sender, text, tag):
-        self.chat_display.config(state=tk.NORMAL)
-        ts = time.strftime("%H:%M")
-        self.chat_display.insert(tk.END, f"{ts}  {sender}: {text}\n\n", tag)
-        self.chat_display.see(tk.END)
-        self.chat_display.config(state=tk.DISABLED)
+            with open(
 
-    def _post_user_message(self, text):
-        self._post_message("You", text, "user_msg")
+                "chatbot_knowledge.json",
 
-    def _post_bot_message(self, text):
-        self._post_message("Bot", text, "bot_msg")
+                "w",
 
-    def _post_system_message(self, text):
-        self._post_message("", text, "sys_msg")
+                encoding="utf-8"
 
-    # ─────────── CONTEXT EXTRACTION ──────────
+            ) as file:
 
-    def _extract_context(self, text):
-        lower = text.lower()
-        m = re.search(r"my name is (\w+)", lower)
-        if m:
-            self.context["customer_name"] = m.group(1).capitalize()
+                json.dump(
 
-        m = re.search(r"order\s*#?(\d+)", lower)
-        if m:
-            self.context["order_number"] = m.group(1)
+                    self.knowledge_base,
 
-        for product in ["smartphone", "laptop", "headphones"]:
-            if product in lower:
-                self.context["current_product"] = product
+                    file,
 
-        for issue in ["broken", "defective", "not working", "problem", "issue", "error", "fault"]:
-            if issue in lower and issue not in self.context["mentioned_issues"]:
-                self.context["mentioned_issues"].append(issue)
+                    indent=4,
 
-    # ─────────── RAG RESPONSE GENERATOR ──────
+                    ensure_ascii=False
+                )
 
-    def _generate_response(self, user_text, intent, confidence):
-        """
-        RAG Pipeline:
-          1. Retrieve relevant knowledge passages (retriever)
-          2. Use intent + retrieved context to generate response
-        """
-        kb = self.knowledge_base
-        name = self.context["customer_name"]
-        name_str = f" {name}" if name else ""
+        except OSError:
 
-        # ── Retrieve top passages ─────────────
-        retrieved = self.retriever.retrieve(user_text, top_k=2)
-        retrieved_intents = [doc["meta"] for doc, _ in retrieved]
-        self.rag_label.config(
-            text=f"RAG retrieved: {retrieved_intents}  |  Intent: {intent} (conf: {confidence})"
+            pass
+
+
+    # ========================================================
+    # CONTEXT TRACKING
+    # ========================================================
+
+    def _extract_context(
+        self,
+        text
+    ):
+
+        name_match = re.search(
+
+            r"\bmy name is "
+            r"([a-zA-Z]+)",
+
+            text,
+
+            re.IGNORECASE
         )
 
-        lower = user_text.lower()
+        if name_match:
 
-        # ── Intent-based response ─────────────
+            self.context[
+                "customer_name"
+            ] = (
+                name_match.group(1)
+                .title()
+            )
+
+
+        order_match = re.search(
+
+            r"\b(?:order|order number|order id)"
+            r"\s*[:#-]?"
+            r"\s*([A-Z0-9-]{4,})\b",
+
+            text,
+
+            re.IGNORECASE
+        )
+
+        if order_match:
+
+            self.context[
+                "order_number"
+            ] = (
+                order_match.group(1)
+            )
+
+
+        product_keywords = {
+
+            "smartphone": [
+                "smartphone",
+                "phone",
+                "mobile"
+            ],
+
+            "laptop": [
+                "laptop",
+                "notebook"
+            ],
+
+            "headphones": [
+                "headphones",
+                "headset",
+                "earphones"
+            ]
+        }
+
+
+        text_lower = text.lower()
+
+
+        for product, words in (
+            product_keywords.items()
+        ):
+
+            if any(
+                word in text_lower
+                for word in words
+            ):
+
+                self.context[
+                    "current_product"
+                ] = product
+
+
+        issue_words = [
+
+            "problem",
+            "issue",
+            "broken",
+            "wrong",
+            "error",
+            "not working",
+            "damaged"
+        ]
+
+
+        if any(
+            word in text_lower
+            for word in issue_words
+        ):
+
+            if (
+                text not in
+                self.context[
+                    "mentioned_issues"
+                ]
+            ):
+
+                self.context[
+                    "mentioned_issues"
+                ].append(
+                    text
+                )
+
+
+    # ========================================================
+    # RESPONSE GENERATION
+    # ========================================================
+
+    def _generate_response(
+
+        self,
+        text,
+        intent,
+        sentiment
+    ):
+
+        retrieved = (
+            self.retriever.retrieve(
+                text,
+                top_k=2
+            )
+        )
+
+
+        if retrieved:
+
+            retrieval_names = ", ".join(
+
+                f"{doc['meta']} "
+                f"({score:.2f})"
+
+                for score, doc
+                in retrieved
+            )
+
+            self.rag_label.config(
+
+                text=
+                "Knowledge retrieved: "
+                f"{retrieval_names}"
+            )
+
+        else:
+
+            self.rag_label.config(
+
+                text=
+                "Knowledge retrieved: none"
+            )
+
+
         if intent == "greeting":
-            return f"Hello{name_str}! How can I assist you today? 😊"
+
+            return (
+                self.knowledge_base[
+                    "greeting"
+                ][
+                    "response"
+                ]
+            )
+
 
         if intent == "farewell":
-            return random.choice([
-                "Thank you for reaching out! Have a great day! 👋",
-                "Goodbye! Don't hesitate to come back if you need help.",
-                "Take care! We're always here if you need us."
-            ])
+
+            return (
+                self.knowledge_base[
+                    "farewell"
+                ][
+                    "response"
+                ]
+            )
+
 
         if intent == "thanks":
-            return random.choice([
-                "You're welcome! Is there anything else I can help with?",
-                "Happy to help! Let me know if you need anything else. 😊",
-                "My pleasure! Feel free to ask anytime."
-            ])
+
+            return (
+                self.knowledge_base[
+                    "thanks"
+                ][
+                    "response"
+                ]
+            )
+
 
         if intent == "business_hours":
-            return f"Our business hours are: {kb['business']['hours']}."
+
+            return (
+                self.knowledge_base[
+                    "business_hours"
+                ][
+                    "response"
+                ]
+            )
+
 
         if intent == "return_refund":
-            return (f"📦 Return Policy: {kb['policies']['return']}.\n"
-                    f"💰 Refund: {kb['policies']['refund']}.")
 
-        if intent == "shipping":
-            if self.context["order_number"]:
-                statuses = ["processing", "shipped", "out for delivery", "delivered"]
-                return (f"I've checked order #{self.context['order_number']} — "
-                        f"it's currently {random.choice(statuses)}. 🚚\n"
-                        f"Shipping info: {kb['policies']['shipping']}.")
-            return f"🚚 Shipping: {kb['policies']['shipping']}. Share your order number for tracking."
+            return (
+                self.knowledge_base[
+                    "return_refund"
+                ][
+                    "response"
+                ]
+            )
+
 
         if intent == "warranty":
-            return f"🛡️ Warranty Policy: {kb['policies']['warranty']}."
+
+            return (
+                self.knowledge_base[
+                    "warranty"
+                ][
+                    "response"
+                ]
+            )
+
 
         if intent == "contact_info":
-            c = kb["business"]["contact"]
-            return (f"📞 Phone: {c['phone']}\n"
-                    f"📧 Email: {c['email']}\n"
-                    f"🌐 Website: {c['website']}")
 
-        if intent == "human_agent":
-            return ("I'll connect you with a human representative right away. "
-                    "Please hold for a moment... 👤")
+            return (
+                self.knowledge_base[
+                    "contact_info"
+                ][
+                    "response"
+                ]
+            )
+
 
         if intent == "technical_support":
-            issues = ", ".join(self.context["mentioned_issues"]) or "your issue"
-            return (f"I'm sorry to hear about {issues}. 🔧\n"
-                    "Let me help troubleshoot:\n"
-                    "1. Please restart the device.\n"
-                    "2. Check for software updates.\n"
-                    "3. If the issue persists, I can connect you to our technical team.")
 
-        if intent == "product_info":
-            product = self.context["current_product"]
+            return (
+                self.knowledge_base[
+                    "technical_support"
+                ][
+                    "response"
+                ]
+            )
+
+
+        if intent == "human_agent":
+
+            return (
+                self.knowledge_base[
+                    "human_agent"
+                ][
+                    "response"
+                ]
+            )
+
+
+        if intent == "shipping":
+
+            if self.context[
+                "order_number"
+            ]:
+
+                statuses = [
+
+                    "Your order is currently being processed.",
+
+                    "Your order has been dispatched.",
+
+                    "Your order is currently in transit."
+                ]
+
+                status = random.choice(
+                    statuses
+                )
+
+                return (
+
+                    f"{status} "
+
+                    "Standard shipping takes "
+                    "3-5 days; express takes "
+                    "1-2 days."
+                )
+
+
+            return (
+
+                "🚚 Shipping: Standard "
+                "3-5 days; express "
+                "1-2 days. "
+
+                "Share your order number "
+                "for tracking."
+            )
+
+
+        if intent in (
+            "product_info",
+            "pricing"
+        ):
+
+            product = (
+                self.context[
+                    "current_product"
+                ]
+            )
+
+
             if product:
-                electronics = kb["products"].get("electronics", {})
-                if product in electronics:
-                    p = electronics[product]
-                    return (f"📱 {product.capitalize()} — Price: {p['price']}\n"
-                            f"✨ Features: {p['features']}")
-            return ("We carry smartphones, laptops, and headphones. "
-                    "Which product would you like details on?")
 
-        if intent == "pricing":
-            product = self.context["current_product"]
-            if product:
-                electronics = kb["products"].get("electronics", {})
-                if product in electronics:
-                    return f"💲 The {product} is priced at {electronics[product]['price']}."
-            return "Could you tell me which product you'd like pricing for?"
+                section = (
+                    self.knowledge_base.get(
+                        intent,
+                        {}
+                    )
+                )
 
-        # ── RAG fallback: use retrieved context ──
+                response = (
+                    section.get(
+                        product
+                    )
+                )
+
+                if response:
+
+                    return response
+
+
+            if intent == "product_info":
+
+                return (
+
+                    "We currently have "
+                    "smartphones, laptops, "
+                    "and headphones. "
+
+                    "Tell me which product "
+                    "you want to know about."
+                )
+
+
+            return (
+
+                "We currently have pricing "
+                "information for smartphones, "
+                "laptops, and headphones. "
+
+                "Tell me which product "
+                "you mean."
+            )
+
+
         if retrieved:
-            top_intent = retrieved[0][0]["meta"]
-            return (f"Based on your query, here's what I found (RAG-retrieved topic: {top_intent}):\n"
-                    "Could you provide more details so I can give you a precise answer?")
 
-        # ── Final fallback ──
-        if self.context["last_intent"]:
-            return (f"I see you're asking about {self.context['last_intent'].replace('_', ' ')}. "
-                    "Could you rephrase or add more details?")
+            best_doc = retrieved[0][1]
 
-        return random.choice([
-            "I'm not quite sure I understand. Could you rephrase that?",
-            "Could you provide more details? I want to make sure I help you correctly.",
-            "I'd like to help! Could you tell me a bit more about your question?"
-        ])
+            return (
 
-    # ─────────── PROCESS INPUT ───────────────
+                "I found some information "
+                "related to "
 
-    def process_input(self, event=None):
-        user_text = self.user_input.get().strip()
-        if not user_text:
-            return
-        self.user_input.delete(0, tk.END)
+                f"{best_doc['meta'].replace('_', ' ')}. "
 
-        # Display user message
-        self._post_user_message(user_text)
-        self.conversation_history.append({"role": "user", "text": user_text})
+                "Could you provide a little "
+                "more detail about what you need?"
+            )
 
-        # Extract context entities
-        self._extract_context(user_text)
 
-        # Sentiment analysis
-        sentiment = analyze_sentiment(user_text)
-        self.sentiment_history.append(sentiment)
-        self.current_sentiment = sentiment
-        self._update_sentiment_ui(sentiment)
+        if sentiment == "Negative":
 
-        # Intent classification (TF-IDF retrieval)
-        intent, confidence = self.classifier.classify(user_text)
-        self.context["last_intent"] = intent
-        self.intent_label.config(
-            text=f"Intent: {intent.replace('_', ' ').title()}  ({confidence:.2f})"
+            return (
+
+                "I'm sorry you're experiencing "
+                "a problem. Could you provide "
+                "more details so I can help?"
+            )
+
+
+        return (
+
+            "I'm not completely sure I "
+            "understood that. Could you "
+            "rephrase your question?"
         )
 
-        # Generate RAG-style response
-        response = self._generate_response(user_text, intent, confidence)
 
-        # Save to history
-        self.conversation_history.append({"role": "bot", "text": response, "intent": intent})
+    # ========================================================
+    # PROCESS USER INPUT
+    # ========================================================
 
-        # Delayed response display
-        self.root.after(700, lambda: self._post_bot_message(response))
+    def process_input(self):
 
-        # Negative sentiment escalation
-        if (self.current_sentiment == "negative"
-                and len(self.sentiment_history) >= 3
-                and self.sentiment_history[-3:].count("negative") >= 2):
-            escalation = ("⚠️ I notice you seem frustrated. "
-                          "Would you like me to escalate this to a human representative?")
-            self.root.after(1600, lambda: self._post_bot_message(escalation))
+        text = (
+            self.input_box
+            .get()
+            .strip()
+        )
 
-    # ─────────── SENTIMENT UI ────────────────
+        if not text:
 
-    def _update_sentiment_ui(self, sentiment):
-        config = {
-            "positive": ("Sentiment: Positive 😊", "green"),
-            "negative": ("Sentiment: Negative 😞", "red"),
-            "neutral":  ("Sentiment: Neutral 😐",  "blue")
-        }
-        text, color = config[sentiment]
-        self.sentiment_label.config(text=text, fg=color)
+            return
 
 
-# ─────────────────────────────────────────────
-# 8.  ENTRY POINT
-# ─────────────────────────────────────────────
+        self.input_box.delete(
+            0,
+            tk.END
+        )
+
+
+        self._append_message(
+            "You",
+            text
+        )
+
+
+        self.conversation_history.append({
+
+            "role":
+            "user",
+
+            "text":
+            text
+        })
+
+
+        self._extract_context(
+            text
+        )
+
+
+        sentiment = analyze_sentiment(
+            text
+        )
+
+        self.current_sentiment = (
+            sentiment
+        )
+
+        self.sentiment_history.append(
+            sentiment
+        )
+
+
+        intent, score = (
+            self.classifier.classify(
+                text
+            )
+        )
+
+
+        self.context[
+            "last_intent"
+        ] = intent
+
+
+        self.intent_label.config(
+
+            text=
+            "Intent: "
+
+            f"{intent.replace('_', ' ').title()} "
+
+            f"(similarity: {score:.2f})"
+        )
+
+
+        self.sentiment_label.config(
+
+            text=
+            f"Sentiment: {sentiment}"
+        )
+
+
+        response = (
+            self._generate_response(
+                text,
+                intent,
+                sentiment
+            )
+        )
+
+
+        self.conversation_history.append({
+
+            "role":
+            "bot",
+
+            "text":
+            response
+        })
+
+
+        self.root.after(
+
+            250,
+
+            lambda:
+            self._append_message(
+                "Bot",
+                response
+            )
+        )
+
+
+        # Simple escalation suggestion
+        # for repeated negative sentiment.
+
+        if len(
+            self.sentiment_history
+        ) >= 3:
+
+            recent = (
+                self.sentiment_history[-3:]
+            )
+
+            if (
+                recent.count(
+                    "Negative"
+                ) >= 2
+            ):
+
+                self.root.after(
+
+                    400,
+
+                    lambda:
+                    self._append_message(
+
+                        "System",
+
+                        "Repeated negative "
+                        "sentiment detected. "
+                        "Consider escalating "
+                        "the conversation to a "
+                        "human agent."
+                    )
+                )
+
+
+# ============================================================
+# 8. MAIN
+# ============================================================
 
 def main():
+
     root = tk.Tk()
-    app = CustomerServiceChatbot(root)
+
+    CustomerServiceChatbot(
+        root
+    )
+
     root.mainloop()
 
 
 if __name__ == "__main__":
+
     main()
