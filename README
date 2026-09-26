@@ -1,116 +1,447 @@
 # 🤖 AI-Powered Customer Support Chatbot
 
-A context-aware customer support chatbot built with Python, featuring **Retrieval-Augmented Generation (RAG)**, **LLM-style Intent Classification**, **Sentiment Analysis**, and a **Tkinter GUI**.
+An NLP-based customer support chatbot built in Python that can understand customer queries, classify their intent, detect sentiment, retrieve relevant knowledge, maintain basic conversation context, and generate appropriate responses through a Tkinter desktop interface.
+
+## 📌 Project Overview
+
+Customer support systems receive many repetitive queries related to shipping, returns, product information, pricing, warranties, and technical issues.
+
+This project demonstrates how traditional NLP and machine learning concepts can be combined to build a lightweight customer-support chatbot without using an LLM or external NLP API.
+
+The chatbot uses:
+
+* Text preprocessing and tokenization
+* TF-IDF feature extraction
+* Cosine similarity
+* Nearest Centroid intent classification
+* Rule-based sentiment analysis
+* TF-IDF-based knowledge retrieval
+* Basic conversation context tracking
+* Tkinter GUI
+
+---
+
+## ✨ Features
+
+### 1. Natural Language Processing
+
+The chatbot preprocesses user queries by:
+
+* Converting text to lowercase
+* Removing unwanted special characters
+* Preserving apostrophes for negation handling
+* Tokenizing text
+* Removing single-character tokens
+
+### 2. Intent Classification
+
+The chatbot identifies the user's intent using:
+
+**Tokenization → TF-IDF → Cosine Similarity → Nearest Centroid**
+
+The classifier contains **12 customer-support intents**:
+
+1. Greeting
+2. Farewell
+3. Business Hours
+4. Return / Refund
+5. Shipping
+6. Product Information
+7. Pricing
+8. Technical Support
+9. Contact Information
+10. Warranty
+11. Human Agent
+12. Thanks
+
+A similarity threshold of **0.12** is used to classify low-similarity queries as `unknown`.
+
+### 3. Custom Training Dataset
+
+The project uses a **custom-created prototype dataset** rather than a downloaded public dataset.
+
+* Total examples: **240**
+* Intents: **12**
+* Examples per intent: **20**
+* Training samples: **180**
+* Testing samples: **60**
+* Train/Test split: **75% / 25%**
+* Random seed: **42**
+
+The dataset is split separately for each intent so that all 12 intents are represented in both the training and testing sets.
+
+### 4. TF-IDF
+
+TF-IDF is implemented manually in Python using:
+
+* Term Frequency (TF)
+* Inverse Document Frequency (IDF)
+* Smoothed IDF calculation
+
+The project does not use `TfidfVectorizer` from Scikit-learn.
+
+### 5. Cosine Similarity
+
+Cosine similarity is implemented manually to measure similarity between TF-IDF vectors.
+
+It is used for:
+
+* Comparing user queries with intent centroids
+* Ranking relevant knowledge documents
+
+### 6. Nearest Centroid Classification
+
+For each intent, the system calculates a centroid representing the average TF-IDF vector of its training examples.
+
+When a new query is received:
+
+1. The query is converted into a TF-IDF vector.
+2. Its cosine similarity is calculated against every intent centroid.
+3. The intent with the highest similarity is selected.
+4. If the similarity is below `0.12`, the result is classified as `unknown`.
+
+### 7. Knowledge Retrieval
+
+The chatbot contains a small knowledge base of customer-support documents covering topics such as:
+
+* Shipping
+* Returns and refunds
+* Product information
+* Pricing
+* Business hours
+* Warranty
+* Technical support
+* Contact information
+* Human-agent support
+
+The `KnowledgeRetriever` uses TF-IDF and cosine similarity to retrieve the **top 2 relevant documents** for a query.
+
+> Note: This is a retrieval-based component using TF-IDF and cosine similarity. It does not use a generative LLM.
+
+### 8. Sentiment Analysis
+
+The chatbot performs **rule-based / lexicon-based sentiment analysis**.
+
+It identifies:
+
+* 🟢 Positive
+* 🔴 Negative
+* ⚪ Neutral
+
+The system uses predefined positive and negative word lists.
+
+It also supports basic **negation handling**.
+
+Examples:
+
+```text
+"I am happy"
+→ Positive
+
+"I am not happy"
+→ Negative
+
+"The product is not bad"
+→ Positive
+```
+
+### 9. Conversation Context
+
+The chatbot maintains basic context information during a conversation, including:
+
+```text
+customer_name
+current_product
+mentioned_issues
+order_number
+last_intent
+```
+
+For example, if the user first mentions:
+
+```text
+"Tell me about the laptop."
+```
+
+and then asks:
+
+```text
+"How much does it cost?"
+```
+
+the chatbot can use the previously detected product context to provide the laptop price.
+
+### 10. Simulated Order Status
+
+For shipping queries where an order number is provided, the chatbot generates a simulated order status.
+
+Possible statuses include:
+
+* Order being processed
+* Order dispatched
+* Order in transit
+
+These statuses are **simulated** and are not connected to a real order-management system.
+
+### 11. Tkinter GUI
+
+The chatbot includes a desktop interface built using Tkinter.
+
+The interface displays:
+
+* Chat conversation
+* User input
+* Bot responses
+* Predicted intent
+* Intent similarity score
+* Sentiment
+* Knowledge retrieval information
+* Model performance metrics
+
+### 12. Negative Sentiment Escalation
+
+The chatbot monitors recent sentiment history.
+
+If at least **2 of the last 3 user messages** are classified as negative, the system displays a suggestion to consider escalating the conversation to a human support representative.
+
+---
+
+## 🏗️ System Architecture
+
+```text
+                USER QUERY
+                    ↓
+            Text Preprocessing
+                    ↓
+                Tokenization
+                    ↓
+        ┌───────────┴───────────┐
+        ↓                       ↓
+TF-IDF / Intent             Sentiment
+Classification              Analysis
+        ↓                       ↓
+        └───────────┬───────────┘
+                    ↓
+             Context Tracking
+                    ↓
+            Knowledge Retrieval
+                    ↓
+            Response Generation
+                    ↓
+               Tkinter GUI
+```
+
+---
+
+## 🔄 Intent Classification Pipeline
+
+```text
+User Query
+    ↓
+Tokenization
+    ↓
+TF-IDF Vector
+    ↓
+Compare with Intent Centroids
+    ↓
+Cosine Similarity
+    ↓
+Highest Similarity Score
+    ↓
+Predicted Intent
+```
+
+---
+
+## 📊 Model Evaluation
+
+The application automatically calculates:
+
+* Training Accuracy
+* Testing Accuracy
+* Per-intent F1 Score
+* Macro F1 Score
+
+The application displays these metrics after training when the GUI starts.
+
+The exact accuracy values may vary if the training dataset or implementation is changed, so the application calculates them dynamically rather than hard-coding them.
+
+---
+
+## 🛠️ Technologies Used
+
+* **Python**
+* **Tkinter**
+* **Regular Expressions (`re`)**
+* **TF-IDF**
+* **Cosine Similarity**
+* **Nearest Centroid Classification**
+* **Rule-Based Sentiment Analysis**
+* **JSON**
+* **Object-Oriented Programming**
+
+The current implementation uses Python's standard libraries and does not require Scikit-learn, TensorFlow, PyTorch, or an external API.
 
 ---
 
 ## 📁 Project Structure
 
+```text
+AI-Customer-Support-Chatbot/
+│
+├── chatbot.py
+├── chatbot_knowledge.json      # Optional knowledge-base file
+└── README.md
 ```
-📁 Your Project Folder
- ├── chatbot_upgraded.py        ← Main application (run this)
- ├── chatbot_knowledge.json     ← Auto-created when you run the app
- ├── requirements.txt           ← Dependencies (all built-in)
- └── README.md                  ← This file
-```
+
+### `chatbot.py`
+
+Main application containing:
+
+* Text preprocessing
+* TF-IDF implementation
+* Cosine similarity
+* Intent dataset
+* Intent classifier
+* Knowledge retriever
+* Sentiment analyzer
+* Knowledge base
+* Conversation context
+* Tkinter GUI
+
+### `chatbot_knowledge.json`
+
+An optional external knowledge-base file.
+
+If this file exists in the same directory, the chatbot attempts to load it. Otherwise, it uses the built-in `DEFAULT_KB`.
 
 ---
 
-## 🚀 How to Run
+## ⚙️ Installation
 
-### In Visual Studio Code
-1. Open VS Code
-2. Go to `File` → `Open Folder` → select your project folder
-3. Open `chatbot_upgraded.py`
-4. Click the **▶ Run** button (top right) OR press `F5`
+### 1. Clone the repository
 
-### In Terminal / Command Prompt
 ```bash
-python chatbot_upgraded.py
+git clone https://github.com/Dhanashree-pogade/AI-Customer-Support-Chatbot.git
 ```
 
-> ✅ No pip installs needed — all libraries are built into Python.
+### 2. Navigate to the project directory
+
+```bash
+cd AI-Customer-Support-Chatbot
+```
+
+### 3. Run the chatbot
+
+```bash
+python chatbot.py
+```
+
+> Python 3.10+ is recommended.
+
+Tkinter is included with most standard Python installations on Windows.
 
 ---
 
-## 🧠 Key Features & Technologies
+## 💬 Example Queries
 
-### 1. RAG — Retrieval-Augmented Generation
-- A `KnowledgeRetriever` class indexes 9 knowledge passages using **TF-IDF vectors**
-- Every user message triggers a **top-2 document retrieval** step
-- The chatbot's response is generated from the retrieved context — mimicking a real RAG pipeline
-- Retrieved documents are shown live in the UI
+### Shipping
 
-### 2. LLM-Style Intent Classification
-- A `IntentClassifier` trained on **12 intents** (greeting, shipping, returns, pricing, warranty, etc.)
-- Uses **TF-IDF + Cosine Similarity** (nearest-centroid approach)
-- Performs a proper **75/25 train/test split**
-- Reports **train accuracy**, **test accuracy**, and **F1 score per intent** on startup
+```text
+User: When will my order arrive?
 
-### 3. Sentiment Analysis
-- Token-level sentiment scoring using positive/negative word lists
-- **Negation handling** — e.g. "not happy" is correctly classified as negative
-- Tracks sentiment history across the conversation
-- Auto-escalates to human agent after repeated negative sentiment
+Bot: 🚚 Shipping: Standard 3-5 days; express 1-2 days.
+Share your order number for tracking.
+```
 
-### 4. Conversation Context Memory
-- Extracts and remembers: customer name, order number, product mentioned, reported issues
-- Uses context across turns for more relevant responses
+### Product Information
 
-### 5. Tkinter GUI
-- Live **intent + confidence score** display per message
-- Live **RAG retrieval result** shown per message
-- **Sentiment indicator** (Positive 😊 / Negative 😞 / Neutral 😐)
-- Model metrics bar showing train/test accuracy on startup
+```text
+User: Tell me about the laptop.
 
----
+Bot: The laptop has a 15.6 inch display,
+512GB SSD, and 16GB RAM.
+```
 
-## 📦 Dependencies
+### Pricing
 
-| Library       | Purpose                        | Installation |
-|---------------|--------------------------------|--------------|
-| `tkinter`     | GUI framework                  | Built-in     |
-| `re`          | Regular expressions            | Built-in     |
-| `math`        | TF-IDF calculations            | Built-in     |
-| `json`        | Knowledge base storage         | Built-in     |
-| `os`          | File handling                  | Built-in     |
-| `random`      | Response variation             | Built-in     |
-| `time`        | Timestamps                     | Built-in     |
-| `collections` | Counter, defaultdict for NLP   | Built-in     |
+```text
+User: How much does the laptop cost?
 
-> **No external packages required.**
+Bot: The laptop costs $999.
+```
+
+### Sentiment
+
+```text
+User: The product is terrible.
+
+Sentiment: Negative
+```
+
+### Human Agent
+
+```text
+User: I want to speak to a human.
+
+Bot: Sure. I can help connect you with a human
+customer-support representative.
+```
 
 ---
 
-## 💬 Sample Queries to Try
+## 🎯 Learning Outcomes
 
-| You type...                        | Bot does...                              |
-|------------------------------------|------------------------------------------|
-| `hello`                            | Greeting response                        |
-| `what are your business hours?`    | Returns hours from knowledge base        |
-| `how do I return my laptop?`       | Return + refund policy                   |
-| `where is my order #12345?`        | Tracks order by number                   |
-| `how much does a smartphone cost?` | Retrieves pricing info                   |
-| `my device is broken`              | Technical support + troubleshooting      |
-| `I want to speak to a human`       | Escalates to human agent                 |
-| `thank you`                        | Friendly farewell                        |
+This project demonstrates practical understanding of:
+
+* Natural Language Processing
+* Text preprocessing
+* Feature engineering
+* TF-IDF
+* Vector similarity
+* Intent classification
+* Model evaluation
+* Sentiment analysis
+* Information retrieval
+* Conversation context
+* GUI development
+* Object-oriented Python
 
 ---
 
-## 🛠️ Troubleshooting
+## 🚀 Future Improvements
 
-**Tkinter not found on Windows?**
-- Uninstall Python and reinstall from [python.org](https://python.org)
-- During install, make sure **"tcl/tk and IDLE"** is checked
+Potential improvements include:
 
-**Python not recognized in terminal?**
-- Add Python to PATH during installation
-- Or use: `py chatbot.py` instead of `python`
+* Expand the training dataset with more real-world queries
+* Use a larger and more diverse knowledge base
+* Replace simulated order status with a real order-management API
+* Add database integration
+* Improve context management
+* Add more advanced NLP techniques
+* Use a trained machine-learning or transformer-based sentiment model
+* Add authentication and user profiles
+* Deploy the chatbot as a web application
+* Integrate an LLM for more flexible response generation
+
+---
+
+## ⚠️ Limitations
+
+* The training dataset is a custom prototype dataset.
+* Intent classification is limited to 12 predefined intents.
+* Sentiment analysis is lexicon/rule-based.
+* Knowledge retrieval is based on TF-IDF and cosine similarity.
+* The chatbot does not use a generative LLM.
+* Order tracking is simulated rather than connected to a real order system.
+* The knowledge base contains predefined customer-support information.
 
 ---
 
 ## 👩‍💻 Author
 
-**Dhanashree Pogade**  
-B.Tech Data Science | Ajeenkya D Y Patil University  
-📧 dhanashreepogade7@gmail.com
+**Dhanashree Pogade**
+
+B.Tech — Data Science
+
+Interested in Data Science, Machine Learning, AI, and Business Analytics.
